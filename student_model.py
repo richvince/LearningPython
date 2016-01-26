@@ -37,15 +37,14 @@ class StudentModel(object):
             embedding = tf.get_variable("embedding", [num_skills*2, size])
             inputs = tf.nn.embedding_lookup(embedding, self._input_data)
 
+        #with tf.device("/cpu:0"):
+        #    labels = tf.expand_dims(self._input_data, 1)
+        #    indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
+        #    concated = tf.concat(1, [indices, labels])
+        #    inputs = tf.sparse_to_dense(concated, tf.pack([batch_size, num_skills*2]), 1.0, 0.0)
 
         if is_training and config.keep_prob < 1:
             inputs = tf.nn.dropout(inputs, config.keep_prob)
-
-        #with tf.device("/cpu:0"):
-        #    labels = tf.expand_dims(inputs, 1)
-        #    indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
-        #    concated = tf.concat(1, [indices, labels])
-        #    onehot_labels = tf.sparse_to_dense(concated, tf.pack([batch_size, num_skills*2]), 1.0, 0.0)
 
         outputs = []
         states = []
@@ -76,10 +75,6 @@ class StudentModel(object):
 
 
         self._cost = cost = tf.reduce_mean(loss)
-        #self._final_state = states[-1]
-
-        #calculate auc for the model
-        #self._auc = auc =
 
         if not is_training:
             return
@@ -152,7 +147,7 @@ class SmallConfig(object):
   max_epoch = 4
   max_max_epoch = 50
   keep_prob = 1.0
-  lr_decay = 0.5
+  lr_decay = 0.9
   batch_size = 20
   num_skills = 100
 
@@ -283,9 +278,9 @@ def main(unused_args):
       #valid_perplexity = run_epoch(session, mvalid, valid_data, tf.no_op())
       #print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
-      if((i+1) % 10 == 0):
+      if((i+1) % 5 == 0):
           print("Start to test model....")
-          rmse, auc = run_epoch(session, mtest, "data/builder_test.csv", tf.no_op())
+          rmse, auc = run_epoch(session, mtest, "data/builder_test_test.csv", tf.no_op())
           print("Test Perplexity:\n rmse: %.3f \t auc: %.3f" % (rmse, auc))
 
 if __name__ == "__main__":
