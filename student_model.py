@@ -17,7 +17,7 @@ class StudentModel(object):
         self.batch_size = batch_size = config.batch_size
         self.num_steps = num_steps = config.num_steps
         self.num_skills = num_skills = config.num_skills
-
+        self.hidden_size = config.hidden_size
         size = config.hidden_size
 
         inputs = self._input_data = tf.placeholder(tf.int32, [batch_size])
@@ -144,7 +144,7 @@ class StudentModel(object):
 class SmallConfig(object):
   """Small config."""
   init_scale = 0.1
-  learning_rate = 0.6
+  learning_rate = 0.8
   max_grad_norm = 5
   num_layers = 2
   num_steps = 1
@@ -163,7 +163,8 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
     start_time = time.time()
     costs = 0.0
     iters = 0
-    state = m.initial_state
+    #state = m.initial_state
+    state = tf.zeros([m.batch_size, m.hidden_size])
     inputs, targets = read_data_from_csv_file(fileName)
     index = 0
     pred_labels = []
@@ -181,7 +182,7 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
         index += m.batch_size
         #print x
 
-        cost, pred, state, _ = session.run([m.cost, m.pred, m.final_state, eval_op], feed_dict={
+        cost, pred, state, _ = session.run([m.cost, m.pred, m.initial_state, eval_op], feed_dict={
             m.input_data: x,m.target_id: target_id,
             m.target_correctness: target_correctness})
         costs += cost
@@ -255,7 +256,6 @@ def main(unused_args):
 
   #raw_data = reader.ptb_raw_data(FLAGS.data_path)
   #train_data, valid_data, test_data, _ = raw_data
-
   config = SmallConfig()
   eval_config = SmallConfig()
   eval_config.batch_size = 1
@@ -283,8 +283,10 @@ def main(unused_args):
       #valid_perplexity = run_epoch(session, mvalid, valid_data, tf.no_op())
       #print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
-    rmse, auc = run_epoch(session, mtest, "data/builder_test.csv", tf.no_op())
-    print("Test Perplexity:\n rmse: %.3f \t auc: %.3f" % (rmse, auc))
+      if((i+1) % 10 == 0):
+          print("Start to test model....")
+          rmse, auc = run_epoch(session, mtest, "data/builder_test.csv", tf.no_op())
+          print("Test Perplexity:\n rmse: %.3f \t auc: %.3f" % (rmse, auc))
 
 if __name__ == "__main__":
     tf.app.run()
