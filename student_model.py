@@ -71,7 +71,7 @@ class StudentModel(object):
             pred_values.append(tf.slice(logits, tf.add([i*batch_size],target_num), [1]))
 
         #pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [-1, batch_size])
-        pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [-1, batch_size])
+        pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [batch_size])
         loss = -tf.reduce_sum(target_correctness*tf.log(pred_values)+(1-target_correctness)*tf.log(1-pred_values))
 
 
@@ -181,18 +181,18 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
         index += m.batch_size
         #print x
 
-        cost, state, _ = session.run([m.cost, m.final_state, eval_op], feed_dict={
+        cost, pred, state, _ = session.run([m.cost, m.pred, m.final_state, eval_op], feed_dict={
             m.input_data: x,m.target_id: target_id,
             m.target_correctness: target_correctness})
         costs += cost
         iters += 1
 
-        for p in m.pred_values:
+        for p in pred:
             pred_labels.append(p)
 
         #if verbose and iters % 20 == 0:
         #    print("%.3f perplexity: %.3f speed: %.0f wps" % (iters * 1.0 / epoch_size, np.exp(costs / iters), iters * m.batch_size / (time.time() - start_time)))
-
+    print pred_labels
     rmse = sqrt(mean_squared_error(actual_labels, pred_labels))
     fpr, tpr, thresholds = metrics.roc_curve(actual_labels, pred_labels, pos_label=1)
     auc = metrics.auc(fpr, tpr)
@@ -277,7 +277,7 @@ def main(unused_args):
       m.assign_lr(session, config.learning_rate * lr_decay)
 
       print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
-      rmse, auc = run_epoch(session, m, "data/builder_train.csv", m.train_op,
+      rmse, auc = run_epoch(session, m, "data/builder_train_test.csv", m.train_op,
                                    verbose=True)
       print("Epoch: %d Train Perplexity:\n rmse: %.3f \t auc: %.3f" % (i + 1, rmse, auc))
       #valid_perplexity = run_epoch(session, mvalid, valid_data, tf.no_op())
