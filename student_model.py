@@ -19,6 +19,7 @@ class StudentModel(object):
         self.num_skills = num_skills = config.num_skills
         self.hidden_size = config.hidden_size
         size = config.hidden_size
+        input_size = config.input_size
 
         inputs = self._input_data = tf.placeholder(tf.int32, [batch_size])
         self._target_id = target_id = tf.placeholder(tf.int32, [batch_size])
@@ -34,15 +35,12 @@ class StudentModel(object):
         self._initial_state = cell.zero_state(batch_size, tf.float32)
 
         with tf.device("/cpu:0"):
-            embedding = tf.get_variable("embedding", [num_skills*2, size])
-            inputs = tf.nn.embedding_lookup(embedding, self._input_data)
-
-        #with tf.device("/cpu:0"):
-        #    labels = tf.expand_dims(self._input_data, 1)
-        #    indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
-        #    concated = tf.concat(1, [indices, labels])
-        #    inputs = tf.sparse_to_dense(concated, tf.pack([batch_size, num_skills*2]), 1.0, 0.0)
-
+            labels = tf.expand_dims(self._input_data, 1)
+            indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
+            concated = tf.concat(1, [indices, labels])
+            inputs = tf.sparse_to_dense(concated, tf.pack([batch_size, num_skills*2+1]), 1.0, 0.0)
+            inputs.set_shape([batch_size, num_skills*2+1])
+        #print inputs.get_shape()
         if is_training and config.keep_prob < 1:
             inputs = tf.nn.dropout(inputs, config.keep_prob)
 
@@ -139,17 +137,18 @@ class StudentModel(object):
 class SmallConfig(object):
   """Small config."""
   init_scale = 0.1
-  learning_rate = 0.8
+  learning_rate = 0.7
   max_grad_norm = 5
   num_layers = 2
   num_steps = 1
   hidden_size = 300
   max_epoch = 4
-  max_max_epoch = 50
+  max_max_epoch = 20
   keep_prob = 1.0
   lr_decay = 0.9
   batch_size = 20
   num_skills = 100
+  input_size = 20
 
 
 def run_epoch(session, m, fileName, eval_op, verbose=False):
@@ -188,7 +187,7 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
 
         #if verbose and iters % 20 == 0:
         #    print("%.3f perplexity: %.3f speed: %.0f wps" % (iters * 1.0 / epoch_size, np.exp(costs / iters), iters * m.batch_size / (time.time() - start_time)))
-    print pred_labels
+    #print pred_labels
     rmse = sqrt(mean_squared_error(actual_labels, pred_labels))
     fpr, tpr, thresholds = metrics.roc_curve(actual_labels, pred_labels, pos_label=1)
     auc = metrics.auc(fpr, tpr)
@@ -231,6 +230,12 @@ def read_data_from_csv_file(fileName):
             problem_ids = tup[1]
             correctness = tup[2]
             for j in range(len(problem_ids)-1):
+                if(j == 0):
+                    inputs.append(0)
+                    target_instance = [int(problem_ids[j]), int(correctness[j])]
+                    targets.append(target_instance)
+                    continue
+
                 problem_id = int(problem_ids[j])
                 #change to vector
                 label_index = 0
