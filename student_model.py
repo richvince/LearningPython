@@ -139,14 +139,14 @@ class SmallConfig(object):
   init_scale = 0.1
   learning_rate = 0.7
   max_grad_norm = 5
-  num_layers = 2
+  num_layers = 1
   num_steps = 1
   hidden_size = 300
   max_epoch = 4
   max_max_epoch = 20
   keep_prob = 1.0
-  lr_decay = 0.9
-  batch_size = 20
+  lr_decay = 0.7
+  batch_size = 100
   num_skills = 100
   input_size = 20
 
@@ -237,12 +237,12 @@ def read_data_from_csv_file(fileName):
                     continue
 
                 problem_id = int(problem_ids[j])
-                #change to vector
+
                 label_index = 0
                 if(int(correctness[j]) == 0):
-                    label_index = problem_id
+                    label_index = problem_id+1
                 else:
-                    label_index = problem_id + skills_num
+                    label_index = problem_id+1 + skills_num
                 inputs.append(label_index)
                 target_instance = [int(problem_ids[j+1]), int(correctness[j+1])]
                 targets.append(target_instance)
@@ -277,7 +277,7 @@ def main(unused_args):
       m.assign_lr(session, config.learning_rate * lr_decay)
 
       print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
-      rmse, auc = run_epoch(session, m, "data/builder_train_test.csv", m.train_op,
+      rmse, auc = run_epoch(session, m, "data/builder_train.csv", m.train_op,
                                    verbose=True)
       print("Epoch: %d Train Perplexity:\n rmse: %.3f \t auc: %.3f" % (i + 1, rmse, auc))
       #valid_perplexity = run_epoch(session, mvalid, valid_data, tf.no_op())
@@ -285,7 +285,7 @@ def main(unused_args):
 
       if((i+1) % 5 == 0):
           print("Start to test model....")
-          rmse, auc = run_epoch(session, mtest, "data/builder_test_test.csv", tf.no_op())
+          rmse, auc = run_epoch(session, mtest, "data/builder_test.csv", tf.no_op())
           print("Test Perplexity:\n rmse: %.3f \t auc: %.3f" % (rmse, auc))
 
 if __name__ == "__main__":
