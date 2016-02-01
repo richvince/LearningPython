@@ -19,18 +19,19 @@ class StudentModel(object):
         self.num_skills = num_skills = config.num_skills
         self.hidden_size = config.hidden_size
         size = config.hidden_size
-        input_size = config.input_size
+        input_size = num_skills*2+1
 
         inputs = self._input_data = tf.placeholder(tf.int32, [batch_size])
         self._target_id = target_id = tf.placeholder(tf.int32, [batch_size])
         self._target_correctness = target_correctness = tf.placeholder(tf.float32, [batch_size])
 
-        lstm_cell = rnn_cell.BasicLSTMCell(size, forget_bias = 0.1)
+        hidden1 = rnn_cell.LSTMCell(size, input_size)
+        hidden2 = rnn_cell.LSTMCell(size, size)
 
-        if is_training and config.keep_prob < 1:
-            lstm_cell = rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob=config.keep_prob)
+        #if is_training and config.keep_prob < 1:
+        #    lstm_cell = rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob=config.keep_prob)
 
-        cell = rnn_cell.MultiRNNCell([lstm_cell] * config.num_layers)
+        cell = rnn_cell.MultiRNNCell([hidden1, hidden2])
 
         self._initial_state = cell.zero_state(batch_size, tf.float32)
 
@@ -55,7 +56,6 @@ class StudentModel(object):
             #outputs = cell_output
             self._final_state = self._initial_state = state
 
-        #output = outputs[-1]
         softmax_w = tf.get_variable("softmax_w", [size, num_skills])
         softmax_b = tf.get_variable("softmax_b", [num_skills])
         logits = tf.sigmoid(tf.matmul(cell_output, softmax_w) + softmax_b)
@@ -63,11 +63,9 @@ class StudentModel(object):
         logits = tf.reshape(logits, [-1])
         self._pred_values = pred_values = []
         for i in range(batch_size):
-            #print logits[i][self._targets[i][0]]
             target_num = self._target_id[i]
-            pred_values.append(tf.slice(logits, tf.add([i*batch_size],target_num), [1]))
+            pred_values.append(tf.slice(logits, tf.add([i*num_skills],target_num), [1]))
 
-        #pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [-1, batch_size])
         pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [batch_size])
         loss = -tf.reduce_sum(target_correctness*tf.log(pred_values)+(1-target_correctness)*tf.log(1-pred_values))
 
@@ -83,6 +81,7 @@ class StudentModel(object):
         grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
         optimizer = tf.train.GradientDescentOptimizer(self.lr)
         self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+        #self._train_op = optimizer.minimize(cost)
 
     def assign_lr(self, session, lr_value):
         session.run(tf.assign(self._lr, lr_value))
@@ -136,16 +135,16 @@ class StudentModel(object):
 
 class SmallConfig(object):
   """Small config."""
-  init_scale = 0.1
-  learning_rate = 0.7
+  init_scale = 0.05
+  learning_rate = 0.3
   max_grad_norm = 5
-  num_layers = 1
+  num_layers = 2
   num_steps = 1
-  hidden_size = 300
+  hidden_size = 400
   max_epoch = 4
-  max_max_epoch = 20
-  keep_prob = 1.0
-  lr_decay = 0.7
+  max_max_epoch = 50
+  keep_prob = 0.8
+  lr_decay = 0.9
   batch_size = 100
   num_skills = 100
   input_size = 20
@@ -175,7 +174,7 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
 
         index += m.batch_size
         #print x
-
+        #print "*"*10
         cost, pred, state, _ = session.run([m.cost, m.pred, m.initial_state, eval_op], feed_dict={
             m.input_data: x,m.target_id: target_id,
             m.target_correctness: target_correctness})
@@ -184,9 +183,6 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
 
         for p in pred:
             pred_labels.append(p)
-
-        #if verbose and iters % 20 == 0:
-        #    print("%.3f perplexity: %.3f speed: %.0f wps" % (iters * 1.0 / epoch_size, np.exp(costs / iters), iters * m.batch_size / (time.time() - start_time)))
     #print pred_labels
     rmse = sqrt(mean_squared_error(actual_labels, pred_labels))
     fpr, tpr, thresholds = metrics.roc_curve(actual_labels, pred_labels, pos_label=1)
@@ -234,7 +230,7 @@ def read_data_from_csv_file(fileName):
                     inputs.append(0)
                     target_instance = [int(problem_ids[j]), int(correctness[j])]
                     targets.append(target_instance)
-                    continue
+                    #continue
 
                 problem_id = int(problem_ids[j])
 
@@ -273,7 +269,7 @@ def main(unused_args):
     tf.initialize_all_variables().run()
 
     for i in range(config.max_max_epoch):
-      lr_decay = config.lr_decay ** max(i - config.max_epoch, 0.0)
+      lr_decay = config.lr_decay ** max(i - config.max_epoch, 0.001)
       m.assign_lr(session, config.learning_rate * lr_decay)
 
       print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
