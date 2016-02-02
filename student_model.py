@@ -19,19 +19,19 @@ class StudentModel(object):
         self.num_skills = num_skills = config.num_skills
         self.hidden_size = config.hidden_size
         size = config.hidden_size
-        input_size = num_skills*2+1
+        input_size = num_skills*2
 
         inputs = self._input_data = tf.placeholder(tf.int32, [batch_size])
         self._target_id = target_id = tf.placeholder(tf.int32, [batch_size])
         self._target_correctness = target_correctness = tf.placeholder(tf.float32, [batch_size])
 
         hidden1 = rnn_cell.LSTMCell(size, input_size)
-        hidden2 = rnn_cell.LSTMCell(size, size)
+        #hidden2 = rnn_cell.LSTMCell(size, size)
 
-        #if is_training and config.keep_prob < 1:
-        #    lstm_cell = rnn_cell.DropoutWrapper(lstm_cell, output_keep_prob=config.keep_prob)
+        if is_training and config.keep_prob < 1:
+            hidden1 = rnn_cell.DropoutWrapper(hidden1, output_keep_prob=config.keep_prob)
 
-        cell = rnn_cell.MultiRNNCell([hidden1, hidden2])
+        cell = rnn_cell.MultiRNNCell([hidden1])
 
         self._initial_state = cell.zero_state(batch_size, tf.float32)
 
@@ -39,8 +39,8 @@ class StudentModel(object):
             labels = tf.expand_dims(self._input_data, 1)
             indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
             concated = tf.concat(1, [indices, labels])
-            inputs = tf.sparse_to_dense(concated, tf.pack([batch_size, num_skills*2+1]), 1.0, 0.0)
-            inputs.set_shape([batch_size, num_skills*2+1])
+            inputs = tf.sparse_to_dense(concated, tf.pack([batch_size, input_size]), 1.0, 0.0)
+            inputs.set_shape([batch_size, input_size])
         #print inputs.get_shape()
         if is_training and config.keep_prob < 1:
             inputs = tf.nn.dropout(inputs, config.keep_prob)
@@ -68,7 +68,6 @@ class StudentModel(object):
 
         pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [batch_size])
         loss = -tf.reduce_sum(target_correctness*tf.log(pred_values)+(1-target_correctness)*tf.log(1-pred_values))
-
 
         self._cost = cost = tf.reduce_mean(loss)
 
@@ -145,8 +144,8 @@ class SmallConfig(object):
   max_max_epoch = 50
   keep_prob = 0.8
   lr_decay = 0.9
-  batch_size = 100
-  num_skills = 100
+  batch_size = 150
+  num_skills = 111
   input_size = 20
 
 
@@ -191,10 +190,11 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
     return rmse, auc
 
 def read_data_from_csv_file(fileName):
+    config = SmallConfig()
     inputs = []
     targets = []
     rows = []
-    skills_num = 100
+    skills_num = config.num_skills
     with open(fileName, "rb") as csvfile:
         reader = csv.reader(csvfile, delimiter=',')
         for row in reader:
@@ -226,19 +226,19 @@ def read_data_from_csv_file(fileName):
             problem_ids = tup[1]
             correctness = tup[2]
             for j in range(len(problem_ids)-1):
-                if(j == 0):
-                    inputs.append(0)
-                    target_instance = [int(problem_ids[j]), int(correctness[j])]
-                    targets.append(target_instance)
+                #if(j == 0):
+                #    inputs.append(0)
+                #    target_instance = [int(problem_ids[j]), int(correctness[j])]
+                #    targets.append(target_instance)
                     #continue
 
                 problem_id = int(problem_ids[j])
 
                 label_index = 0
                 if(int(correctness[j]) == 0):
-                    label_index = problem_id+1
+                    label_index = problem_id
                 else:
-                    label_index = problem_id+1 + skills_num
+                    label_index = problem_id + skills_num
                 inputs.append(label_index)
                 target_instance = [int(problem_ids[j+1]), int(correctness[j+1])]
                 targets.append(target_instance)
@@ -273,7 +273,7 @@ def main(unused_args):
       m.assign_lr(session, config.learning_rate * lr_decay)
 
       print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
-      rmse, auc = run_epoch(session, m, "data/builder_train.csv", m.train_op,
+      rmse, auc = run_epoch(session, m, "data/sk_train.csv", m.train_op,
                                    verbose=True)
       print("Epoch: %d Train Perplexity:\n rmse: %.3f \t auc: %.3f" % (i + 1, rmse, auc))
       #valid_perplexity = run_epoch(session, mvalid, valid_data, tf.no_op())
@@ -281,7 +281,7 @@ def main(unused_args):
 
       if((i+1) % 5 == 0):
           print("Start to test model....")
-          rmse, auc = run_epoch(session, mtest, "data/builder_test.csv", tf.no_op())
+          rmse, auc = run_epoch(session, mtest, "data/sk_test.csv", tf.no_op())
           print("Test Perplexity:\n rmse: %.3f \t auc: %.3f" % (rmse, auc))
 
 if __name__ == "__main__":
