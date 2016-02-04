@@ -58,17 +58,22 @@ class StudentModel(object):
 
         softmax_w = tf.get_variable("softmax_w", [size, num_skills])
         softmax_b = tf.get_variable("softmax_b", [num_skills])
-        logits = tf.sigmoid(tf.matmul(cell_output, softmax_w) + softmax_b)
+        logits = tf.matmul(cell_output, softmax_w) + softmax_b
+        #preds = tf.sigmoid(logits)
 
         logits = tf.reshape(logits, [-1])
+        #logit_values = []
         self._pred_values = pred_values = []
         for i in range(batch_size):
             target_num = self._target_id[i]
-            pred_values.append(tf.slice(logits, tf.add([i*num_skills],target_num), [1]))
+            logit = tf.slice(logits, tf.add([i*num_skills],target_num), [1])
+            pred_values.append(tf.sigmoid(logit))
+            #logit_values.append(logit)
 
         pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [batch_size])
+        #logit_values = tf.reshape(tf.concat(0, logit_values), [batch_size])
         loss = -tf.reduce_sum(target_correctness*tf.log(pred_values)+(1-target_correctness)*tf.log(1-pred_values))
-
+        #loss = tf.nn.sigmoid_cross_entropy_with_logits(logit_values, target_correctness)
         self._cost = cost = tf.reduce_mean(loss)
 
         if not is_training:
@@ -139,7 +144,7 @@ class SmallConfig(object):
   max_grad_norm = 5
   num_layers = 2
   num_steps = 1
-  hidden_size = 400
+  hidden_size = 200
   max_epoch = 4
   max_max_epoch = 50
   keep_prob = 0.8
@@ -257,9 +262,17 @@ def main(unused_args):
   eval_config.batch_size = 1
   eval_config.num_steps = 1
 
+  start_over = True #if False, will store variables from disk
+
   with tf.Graph().as_default(), tf.Session() as session:
-    initializer = tf.random_uniform_initializer(-config.init_scale,
+
+    if(start_over):
+        initializer = tf.random_uniform_initializer(-config.init_scale,
                                                 config.init_scale)
+    else:
+        #restore variables from disk, make sure file exists
+        saver.restore(session, "/tmp/model.ckpt")
+        print "Model restored"
     with tf.variable_scope("model", reuse=None, initializer=initializer):
       m = StudentModel(is_training=True, config=config)
     with tf.variable_scope("model", reuse=True, initializer=initializer):
@@ -267,7 +280,7 @@ def main(unused_args):
       mtest = StudentModel(is_training=False, config=eval_config)
 
     tf.initialize_all_variables().run()
-
+    saver = tf.train.Saver()
     for i in range(config.max_max_epoch):
       lr_decay = config.lr_decay ** max(i - config.max_epoch, 0.001)
       m.assign_lr(session, config.learning_rate * lr_decay)
@@ -281,6 +294,8 @@ def main(unused_args):
 
       if((i+1) % 5 == 0):
           print("Start to test model....")
+          #print "Save the variable to disk"
+          #save_path = saver.save(session, "/model/model.ckpt")
           rmse, auc = run_epoch(session, mtest, "data/sk_test.csv", tf.no_op())
           print("Test Perplexity:\n rmse: %.3f \t auc: %.3f" % (rmse, auc))
 
