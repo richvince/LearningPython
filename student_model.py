@@ -14,29 +14,32 @@ from math import sqrt
 class StudentModel(object):
 
     def __init__(self, is_training, config):
-        self.batch_size = batch_size = config.batch_size
+        #self.batch_size = batch_size = config.batch_size
+        self._batch_size = 0
         self.num_steps = num_steps = config.num_steps
         self.num_skills = num_skills = config.num_skills
         self.hidden_size = config.hidden_size
         size = config.hidden_size
         input_size = num_skills*2
 
-        inputs = self._input_data = tf.placeholder(tf.int32, [batch_size])
-        self._target_id = target_id = tf.placeholder(tf.int32, [batch_size])
-        self._target_correctness = target_correctness = tf.placeholder(tf.float32, [batch_size])
+        inputs = self._input_data = tf.placeholder(tf.int32, [None])
+        self._target_id = target_id = tf.placeholder(tf.int32, [None])
+        self._target_correctness = target_correctness = tf.placeholder(tf.float32, [None])
+
+        batch_size = tf.shape(inputs)[0]
 
         l2_loss = tf.constant(0.0)
 
         hidden1 = rnn_cell.LSTMCell(size, input_size)
-        hidden2 = rnn_cell.LSTMCell(size, size)
+        #hidden2 = rnn_cell.LSTMCell(size, size)
         #hidden3 = rnn_cell.LSTMCell(size, size)
 
         if is_training and config.keep_prob < 1:
             hidden1 = rnn_cell.DropoutWrapper(hidden1, output_keep_prob=config.keep_prob)
-            hidden2 = rnn_cell.DropoutWrapper(hidden2, output_keep_prob=config.keep_prob)
+            #hidden2 = rnn_cell.DropoutWrapper(hidden2, output_keep_prob=config.keep_prob)
             #hidden3 = rnn_cell.DropoutWrapper(hidden3, output_keep_prob=config.keep_prob)
 
-        cell = rnn_cell.MultiRNNCell([hidden1, hidden2])
+        cell = rnn_cell.MultiRNNCell([hidden1])
 
         self._initial_state = cell.zero_state(batch_size, tf.float32)
 
@@ -45,7 +48,7 @@ class StudentModel(object):
             indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
             concated = tf.concat(1, [indices, labels])
             inputs = tf.sparse_to_dense(concated, tf.pack([batch_size, input_size]), 1.0, 0.0)
-            inputs.set_shape([batch_size, input_size])
+            inputs = tf.reshape(inputs, tf.pack([batch_size, input_size]))
 
         outputs = []
         states = []
@@ -54,9 +57,9 @@ class StudentModel(object):
         with tf.variable_scope("RNN"):
             #tf.get_variable_scope().reuse_variables()
             #outputs, states = rnn.rnn(cell, inputs, initial_state=self._initial_state)
-            (cell_output, state) = cell(inputs, state)
+            (cell_output, state) = cell(inputs, self._initial_state)
             #outputs = cell_output
-            self._final_state = self._initial_state = state
+            self._final_state = state
 
         #l2 regularization
         softmax_w = tf.get_variable("softmax_w", [size, num_skills])
@@ -67,16 +70,17 @@ class StudentModel(object):
         #preds = tf.sigmoid(logits)
 
         logits = tf.reshape(logits, [-1])
-        logit_values = []
-        self._pred_values = pred_values = []
-        for i in range(batch_size):
-            target_num = self._target_id[i]
-            logit = tf.slice(logits, tf.add([i*num_skills],target_num), [1])
-            pred_values.append(tf.sigmoid(logit))
-            logit_values.append(logit)
+        logit_values = tf.gather(logits, self.target_id)
+        #logit_values = []
+        self._pred = self._pred_values = pred_values = tf.sigmoid(logit_values)
+        #for i in range(self.batch_size):
+        #    target_num = self._target_id[i]
+        #    logit = tf.slice(logits, tf.add([i*num_skills],target_num), [1])
+        #    pred_values.append(tf.sigmoid(logit))
+        #    logit_values.append(logit)
 
-        pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [batch_size])
-        logit_values = tf.reshape(tf.concat(0, logit_values), [batch_size])
+        #pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [batch_size])
+        #logit_values = tf.reshape(tf.concat(0, logit_values), [batch_size])
         #loss = -tf.reduce_sum(target_correctness*tf.log(pred_values)+(1-target_correctness)*tf.log(1-pred_values))
         loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logit_values, target_correctness))
         #self._cost = cost = tf.reduce_mean(loss) + config.l2_reg_lambda * l2_loss
@@ -102,6 +106,10 @@ class StudentModel(object):
     @property
     def input_data(self):
         return self._input_data
+
+    @property
+    def batch_size(self):
+        return self._batch_size
 
     @property
     def auc(self):
@@ -152,7 +160,7 @@ class SmallConfig(object):
   learning_rate = 0.3
   max_grad_norm = 5
   num_steps = 1
-  hidden_size = 600
+  hidden_size = 300
   max_epoch = 10
   max_max_epoch = 500
   keep_prob = 0.6
@@ -169,30 +177,33 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
     costs = 0.0
     iters = 0
     #state = m.initial_state
-    state = tf.zeros([m.batch_size, m.hidden_size])
-    inputs, targets = read_data_from_csv_file(fileName)
+
+    student_data = read_data_from_csv_file(fileName)
     index = 0
     pred_labels = []
     actual_labels = []
-    while(index+m.batch_size < len(inputs)):
-        x = inputs[index:index+m.batch_size]
-        y = targets[index:index+m.batch_size]
+    print "Length of student_data is " + str(len(student_data))
+    while(index < len(student_data)):
+        x = student_data[index][0]
+        y = student_data[index][1]
+        #m.batch_size = batch_size = len(x)
+        #state = tf.zeros([len(x), m.hidden_size])
         target_id = []
         target_correctness = []
+        count = 0
         for item in y:
-            target_id.append(item[0])
+            target_id.append(count * m.num_skills + item[0])
             target_correctness.append(item[1])
             actual_labels.append(item[1])
+            count += 1
 
-        index += m.batch_size
-        #print x
-        #print "*"*10
+        index += 1
+
         cost, pred, state, _ = session.run([m.cost, m.pred, m.initial_state, eval_op], feed_dict={
             m.input_data: x,m.target_id: target_id,
             m.target_correctness: target_correctness})
-        costs += cost
-        iters += 1
-
+        # debug info
+        #print "Finish running No. " + str(index) + " student"
         for p in pred:
             pred_labels.append(p)
     #print pred_labels
@@ -204,8 +215,7 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
 
 def read_data_from_csv_file(fileName):
     config = SmallConfig()
-    inputs = []
-    targets = []
+
     rows = []
     skills_num = config.num_skills
     with open(fileName, "rb") as csvfile:
@@ -229,6 +239,7 @@ def read_data_from_csv_file(fileName):
 
     random.shuffle(tuple_rows)
     print "The number of students is ", len(tuple_rows)
+    student_data = []
     while(i < len(tuple_rows)):
         #skip the num is smaller than 2
         tup = tuple_rows[i]
@@ -236,6 +247,8 @@ def read_data_from_csv_file(fileName):
         if(problems_num <= 2):
             i += 1
         else:
+            inputs = []
+            targets = []
             problem_ids = tup[1]
             correctness = tup[2]
             for j in range(len(problem_ids)-1):
@@ -255,9 +268,10 @@ def read_data_from_csv_file(fileName):
                 inputs.append(label_index)
                 target_instance = [int(problem_ids[j+1]), int(correctness[j+1])]
                 targets.append(target_instance)
+            student_data.append((inputs, targets))
             i += 1
     print "Finish reading data"
-    return inputs, targets
+    return student_data
 
 
 
