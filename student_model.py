@@ -25,13 +25,18 @@ class StudentModel(object):
         self._target_id = target_id = tf.placeholder(tf.int32, [batch_size])
         self._target_correctness = target_correctness = tf.placeholder(tf.float32, [batch_size])
 
+        l2_loss = tf.constant(0.0)
+
         hidden1 = rnn_cell.LSTMCell(size, input_size)
-        #hidden2 = rnn_cell.LSTMCell(size, size)
+        hidden2 = rnn_cell.LSTMCell(size, size)
+        #hidden3 = rnn_cell.LSTMCell(size, size)
 
         if is_training and config.keep_prob < 1:
             hidden1 = rnn_cell.DropoutWrapper(hidden1, output_keep_prob=config.keep_prob)
+            hidden2 = rnn_cell.DropoutWrapper(hidden2, output_keep_prob=config.keep_prob)
+            #hidden3 = rnn_cell.DropoutWrapper(hidden3, output_keep_prob=config.keep_prob)
 
-        cell = rnn_cell.MultiRNNCell([hidden1])
+        cell = rnn_cell.MultiRNNCell([hidden1, hidden2])
 
         self._initial_state = cell.zero_state(batch_size, tf.float32)
 
@@ -41,9 +46,6 @@ class StudentModel(object):
             concated = tf.concat(1, [indices, labels])
             inputs = tf.sparse_to_dense(concated, tf.pack([batch_size, input_size]), 1.0, 0.0)
             inputs.set_shape([batch_size, input_size])
-        #print inputs.get_shape()
-        if is_training and config.keep_prob < 1:
-            inputs = tf.nn.dropout(inputs, config.keep_prob)
 
         outputs = []
         states = []
@@ -56,24 +58,28 @@ class StudentModel(object):
             #outputs = cell_output
             self._final_state = self._initial_state = state
 
+        #l2 regularization
         softmax_w = tf.get_variable("softmax_w", [size, num_skills])
         softmax_b = tf.get_variable("softmax_b", [num_skills])
+        l2_loss += tf.nn.l2_loss(softmax_w)
+        l2_loss += tf.nn.l2_loss(softmax_b)
         logits = tf.matmul(cell_output, softmax_w) + softmax_b
         #preds = tf.sigmoid(logits)
 
         logits = tf.reshape(logits, [-1])
-        #logit_values = []
+        logit_values = []
         self._pred_values = pred_values = []
         for i in range(batch_size):
             target_num = self._target_id[i]
             logit = tf.slice(logits, tf.add([i*num_skills],target_num), [1])
             pred_values.append(tf.sigmoid(logit))
-            #logit_values.append(logit)
+            logit_values.append(logit)
 
         pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [batch_size])
-        #logit_values = tf.reshape(tf.concat(0, logit_values), [batch_size])
-        loss = -tf.reduce_sum(target_correctness*tf.log(pred_values)+(1-target_correctness)*tf.log(1-pred_values))
-        #loss = tf.nn.sigmoid_cross_entropy_with_logits(logit_values, target_correctness)
+        logit_values = tf.reshape(tf.concat(0, logit_values), [batch_size])
+        #loss = -tf.reduce_sum(target_correctness*tf.log(pred_values)+(1-target_correctness)*tf.log(1-pred_values))
+        loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logit_values, target_correctness))
+        #self._cost = cost = tf.reduce_mean(loss) + config.l2_reg_lambda * l2_loss
         self._cost = cost = tf.reduce_mean(loss)
 
         if not is_training:
@@ -85,10 +91,13 @@ class StudentModel(object):
         grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
         optimizer = tf.train.GradientDescentOptimizer(self.lr)
         self._train_op = optimizer.apply_gradients(zip(grads, tvars))
-        #self._train_op = optimizer.minimize(cost)
+        #self._train_op = optimizer.minimize(grads, tvars)
 
     def assign_lr(self, session, lr_value):
-        session.run(tf.assign(self._lr, lr_value))
+        if (lr_value > 0.001):
+            session.run(tf.assign(self._lr, lr_value))
+        else:
+            session.run(tf.assign(self._lr, 0.001))
 
     @property
     def input_data(self):
@@ -142,16 +151,15 @@ class SmallConfig(object):
   init_scale = 0.05
   learning_rate = 0.3
   max_grad_norm = 5
-  num_layers = 2
   num_steps = 1
-  hidden_size = 200
-  max_epoch = 4
-  max_max_epoch = 50
-  keep_prob = 0.8
+  hidden_size = 600
+  max_epoch = 10
+  max_max_epoch = 500
+  keep_prob = 0.6
   lr_decay = 0.9
-  batch_size = 150
+  batch_size = 50
   num_skills = 111
-  input_size = 20
+  l2_reg_lambda = 0.1
 
 
 def run_epoch(session, m, fileName, eval_op, verbose=False):
@@ -271,7 +279,7 @@ def main(unused_args):
                                                 config.init_scale)
     else:
         #restore variables from disk, make sure file exists
-        saver.restore(session, "/tmp/model.ckpt")
+        saver.restore(session, "tmp/model.ckpt")
         print "Model restored"
     with tf.variable_scope("model", reuse=None, initializer=initializer):
       m = StudentModel(is_training=True, config=config)
@@ -282,11 +290,11 @@ def main(unused_args):
     tf.initialize_all_variables().run()
     saver = tf.train.Saver()
     for i in range(config.max_max_epoch):
-      lr_decay = config.lr_decay ** max(i - config.max_epoch, 0.001)
+      lr_decay = config.lr_decay ** max(i - config.max_epoch, 0)
       m.assign_lr(session, config.learning_rate * lr_decay)
 
       print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
-      rmse, auc = run_epoch(session, m, "data/sk_train.csv", m.train_op,
+      rmse, auc = run_epoch(session, m, "data/2010_no_duo_no_sub_no_ms_builder_train.csv", m.train_op,
                                    verbose=True)
       print("Epoch: %d Train Perplexity:\n rmse: %.3f \t auc: %.3f" % (i + 1, rmse, auc))
       #valid_perplexity = run_epoch(session, mvalid, valid_data, tf.no_op())
@@ -295,9 +303,12 @@ def main(unused_args):
       if((i+1) % 5 == 0):
           print("Start to test model....")
           #print "Save the variable to disk"
-          #save_path = saver.save(session, "/model/model.ckpt")
-          rmse, auc = run_epoch(session, mtest, "data/sk_test.csv", tf.no_op())
-          print("Test Perplexity:\n rmse: %.3f \t auc: %.3f" % (rmse, auc))
+          #save_path = saver.save(session, "model.ckpt")
+          rmse, auc = run_epoch(session, mtest, "data/2010_no_duo_no_sub_no_ms_builder_test.csv", tf.no_op())
+          print("Epoch: %d Test Perplexity:\n rmse: %.3f \t auc: %.3f" % ((i+1)/5, rmse, auc))
+          with open("2010_no_duo_no_sub_no_ms_metrics_results1", "a+") as f:
+              f.write("Epoch: %d Test Perplexity:\n rmse: %.3f \t auc: %.3f" % ((i+1)/5, rmse, auc))
+              f.write("\n")
 
 if __name__ == "__main__":
     tf.app.run()
