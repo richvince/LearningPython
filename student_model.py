@@ -1,4 +1,13 @@
-# start to write student model, hope to complete it in serval hours
+# The code is rewritten based on source code from tensorflow tutorial for Recurrent Neural Network.
+# https://www.tensorflow.org/versions/0.6.0/tutorials/recurrent/index.html
+# You can get source code for the tutorial from
+# https://github.com/tensorflow/tensorflow/blob/master/tensorflow/models/rnn/ptb/ptb_word_lm.py
+#
+# There is dropout on each hidden layer to prevent the model from overfitting
+#
+# Here is an useful practical guide for training dropout networks
+# https://www.cs.toronto.edu/~hinton/absps/JMLRdropout.pdf
+# You can find the practical guide on Appendix A
 import numpy as np
 import tensorflow as tf
 from tensorflow.models.rnn import rnn_cell
@@ -8,6 +17,7 @@ from random import shuffle
 import random
 from tensorflow.models.rnn import rnn
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import r2_score
 from sklearn import metrics
 from math import sqrt
 
@@ -15,8 +25,7 @@ class StudentModel(object):
 
     def __init__(self, is_training, config):
         #self.batch_size = batch_size = config.batch_size
-        self._batch_size = 0
-        self.num_steps = num_steps = config.num_steps
+        self._min_lr = config.min_lr
         self.num_skills = num_skills = config.num_skills
         self.hidden_size = config.hidden_size
         size = config.hidden_size
@@ -34,6 +43,7 @@ class StudentModel(object):
         #hidden2 = rnn_cell.LSTMCell(size, size)
         #hidden3 = rnn_cell.LSTMCell(size, size)
 
+        #add dropout layer between hidden layers
         if is_training and config.keep_prob < 1:
             hidden1 = rnn_cell.DropoutWrapper(hidden1, output_keep_prob=config.keep_prob)
             #hidden2 = rnn_cell.DropoutWrapper(hidden2, output_keep_prob=config.keep_prob)
@@ -41,8 +51,10 @@ class StudentModel(object):
 
         cell = rnn_cell.MultiRNNCell([hidden1])
 
+        # initial state
         self._initial_state = cell.zero_state(batch_size, tf.float32)
 
+        #one-hot encoding
         with tf.device("/cpu:0"):
             labels = tf.expand_dims(self._input_data, 1)
             indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
@@ -53,63 +65,59 @@ class StudentModel(object):
         outputs = []
         states = []
         state = self._initial_state
-        #inputs = tf.split(1, 1, inputs)
         with tf.variable_scope("RNN"):
-            #tf.get_variable_scope().reuse_variables()
             #outputs, states = rnn.rnn(cell, inputs, initial_state=self._initial_state)
-            (cell_output, state) = cell(inputs, self._initial_state)
+            (cell_output, state) = cell(inputs, state)
             #outputs = cell_output
             self._final_state = state
+            state = self._initial_state
 
-        #l2 regularization
+
+        # calculate the logits from last hidden layer to output layer
         softmax_w = tf.get_variable("softmax_w", [size, num_skills])
         softmax_b = tf.get_variable("softmax_b", [num_skills])
-        l2_loss += tf.nn.l2_loss(softmax_w)
-        l2_loss += tf.nn.l2_loss(softmax_b)
         logits = tf.matmul(cell_output, softmax_w) + softmax_b
-        #preds = tf.sigmoid(logits)
 
+        # from output nodes to pick up the right one we want
         logits = tf.reshape(logits, [-1])
         logit_values = tf.gather(logits, self.target_id)
-        #logit_values = []
-        self._pred = self._pred_values = pred_values = tf.sigmoid(logit_values)
-        #for i in range(self.batch_size):
-        #    target_num = self._target_id[i]
-        #    logit = tf.slice(logits, tf.add([i*num_skills],target_num), [1])
-        #    pred_values.append(tf.sigmoid(logit))
-        #    logit_values.append(logit)
 
-        #pred_values = self._pred = tf.reshape(tf.concat(0, pred_values), [batch_size])
-        #logit_values = tf.reshape(tf.concat(0, logit_values), [batch_size])
+        #make prediction
+        self._pred = self._pred_values = pred_values = tf.sigmoid(logit_values)
+
         #loss = -tf.reduce_sum(target_correctness*tf.log(pred_values)+(1-target_correctness)*tf.log(1-pred_values))
+        # loss function
         loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logit_values, target_correctness))
-        #self._cost = cost = tf.reduce_mean(loss) + config.l2_reg_lambda * l2_loss
-        self._cost = cost = tf.reduce_mean(loss)
+
+        #self._cost = cost = tf.reduce_mean(loss)
+        self._cost = cost = loss
 
         if not is_training:
             return
 
         self._lr = tf.Variable(0.0, trainable=False)
         tvars = tf.trainable_variables()
-
+        # apply gradient descent to minimize loss function
         grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), config.max_grad_norm)
         optimizer = tf.train.GradientDescentOptimizer(self.lr)
+        # Momentum algorithm
+        #optimizer = tf.train.MomentumOptimizer(self.lr, config.momentum)
         self._train_op = optimizer.apply_gradients(zip(grads, tvars))
         #self._train_op = optimizer.minimize(grads, tvars)
 
     def assign_lr(self, session, lr_value):
-        if (lr_value > 0.001):
+        if (lr_value > self.min_lr):
             session.run(tf.assign(self._lr, lr_value))
         else:
-            session.run(tf.assign(self._lr, 0.001))
+            session.run(tf.assign(self._lr, self.min_lr))
 
     @property
     def input_data(self):
         return self._input_data
 
     @property
-    def batch_size(self):
-        return self._batch_size
+    def min_lr(self):
+        return self._min_lr
 
     @property
     def auc(self):
@@ -154,40 +162,35 @@ class StudentModel(object):
 
 
 
-class SmallConfig(object):
+class HyperParamsConfig(object):
   """Small config."""
   init_scale = 0.05
   learning_rate = 0.3
-  max_grad_norm = 5
-  num_steps = 1
-  hidden_size = 300
+  max_grad_norm = 4
+  hidden_size = 500
   max_epoch = 10
   max_max_epoch = 500
   keep_prob = 0.6
   lr_decay = 0.9
-  batch_size = 50
   num_skills = 111
-  l2_reg_lambda = 0.1
+  momentum = 0.95
+  min_lr = 0.0001
 
 
 def run_epoch(session, m, fileName, eval_op, verbose=False):
     """Runs the model on the given data."""
-    #epoch_size = ((len(data) // m.batch_size) - 1) // m.num_steps
     start_time = time.time()
-    costs = 0.0
-    iters = 0
-    #state = m.initial_state
 
     student_data = read_data_from_csv_file(fileName)
     index = 0
     pred_labels = []
     actual_labels = []
-    print "Length of student_data is " + str(len(student_data))
+
+    print "\n Start to run Epoch"
     while(index < len(student_data)):
         x = student_data[index][0]
         y = student_data[index][1]
-        #m.batch_size = batch_size = len(x)
-        #state = tf.zeros([len(x), m.hidden_size])
+
         target_id = []
         target_correctness = []
         count = 0
@@ -199,22 +202,24 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
 
         index += 1
 
-        cost, pred, state, _ = session.run([m.cost, m.pred, m.initial_state, eval_op], feed_dict={
+        cost, pred, state, _ = session.run([m.cost, m.pred, m.final_state, eval_op], feed_dict={
             m.input_data: x,m.target_id: target_id,
             m.target_correctness: target_correctness})
-        # debug info
-        #print "Finish running No. " + str(index) + " student"
+
         for p in pred:
             pred_labels.append(p)
-    #print pred_labels
+
+    #calculate rmse
     rmse = sqrt(mean_squared_error(actual_labels, pred_labels))
+    #calculate auc
     fpr, tpr, thresholds = metrics.roc_curve(actual_labels, pred_labels, pos_label=1)
     auc = metrics.auc(fpr, tpr)
-
-    return rmse, auc
+    #calculate r^2
+    r2 = r2_score(actual_labels, pred_labels)
+    return rmse, auc, r2
 
 def read_data_from_csv_file(fileName):
-    config = SmallConfig()
+    config = HyperParamsConfig()
 
     rows = []
     skills_num = config.num_skills
@@ -252,11 +257,6 @@ def read_data_from_csv_file(fileName):
             problem_ids = tup[1]
             correctness = tup[2]
             for j in range(len(problem_ids)-1):
-                #if(j == 0):
-                #    inputs.append(0)
-                #    target_instance = [int(problem_ids[j]), int(correctness[j])]
-                #    targets.append(target_instance)
-                    #continue
 
                 problem_id = int(problem_ids[j])
 
@@ -277,12 +277,10 @@ def read_data_from_csv_file(fileName):
 
 def main(unused_args):
 
-  #raw_data = reader.ptb_raw_data(FLAGS.data_path)
-  #train_data, valid_data, test_data, _ = raw_data
-  config = SmallConfig()
-  eval_config = SmallConfig()
-  eval_config.batch_size = 1
-  eval_config.num_steps = 1
+  config = HyperParamsConfig()
+  eval_config = HyperParamsConfig()
+
+  model_name = "model_variables"
 
   start_over = True #if False, will store variables from disk
 
@@ -293,12 +291,13 @@ def main(unused_args):
                                                 config.init_scale)
     else:
         #restore variables from disk, make sure file exists
-        saver.restore(session, "tmp/model.ckpt")
+        saver.restore(session, model_name)
         print "Model restored"
+    # training model
     with tf.variable_scope("model", reuse=None, initializer=initializer):
       m = StudentModel(is_training=True, config=config)
+    # testing model
     with tf.variable_scope("model", reuse=True, initializer=initializer):
-      #mvalid = StudentModel(is_training=False, config=config)
       mtest = StudentModel(is_training=False, config=eval_config)
 
     tf.initialize_all_variables().run()
@@ -308,21 +307,24 @@ def main(unused_args):
       m.assign_lr(session, config.learning_rate * lr_decay)
 
       print("Epoch: %d Learning rate: %.3f" % (i + 1, session.run(m.lr)))
-      rmse, auc = run_epoch(session, m, "data/2010_no_duo_no_sub_no_ms_builder_train.csv", m.train_op,
+      rmse, auc, r2 = run_epoch(session, m, "data/2010_no_duo_no_sub_no_ms_builder_train.csv", m.train_op,
                                    verbose=True)
-      print("Epoch: %d Train Perplexity:\n rmse: %.3f \t auc: %.3f" % (i + 1, rmse, auc))
+      print("Epoch: %d Train Metrics:\n rmse: %.3f \t auc: %.3f \t r2: %.3f \n" % (i + 1, rmse, auc, r2))
       #valid_perplexity = run_epoch(session, mvalid, valid_data, tf.no_op())
       #print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
-      if((i+1) % 5 == 0):
+      if((i+1) % 3 == 0):
+          print "Save variables to disk"
+          save_path = saver.save(session, model_name)
+          print("*"*10)
           print("Start to test model....")
-          #print "Save the variable to disk"
-          #save_path = saver.save(session, "model.ckpt")
-          rmse, auc = run_epoch(session, mtest, "data/2010_no_duo_no_sub_no_ms_builder_test.csv", tf.no_op())
-          print("Epoch: %d Test Perplexity:\n rmse: %.3f \t auc: %.3f" % ((i+1)/5, rmse, auc))
+          rmse, auc, r2 = run_epoch(session, mtest, "data/2010_no_duo_no_sub_no_ms_builder_test.csv", tf.no_op())
+          print("Epoch: %d Test Metrics:\n rmse: %.3f \t auc: %.3f \t r2: %.3f" % ((i+1)/3, rmse, auc, r2))
           with open("2010_no_duo_no_sub_no_ms_metrics_results1", "a+") as f:
-              f.write("Epoch: %d Test Perplexity:\n rmse: %.3f \t auc: %.3f" % ((i+1)/5, rmse, auc))
+              f.write("Epoch: %d Test Perplexity:\n rmse: %.3f \t auc: %.3f \t r2: %.3f" % ((i+1)/3, rmse, auc, r2))
               f.write("\n")
+
+          print("*"*10)
 
 if __name__ == "__main__":
     tf.app.run()

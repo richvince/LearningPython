@@ -1,0 +1,90 @@
+Epoch: 1 Test Perplexity:
+ rmse: 0.458 	 auc: 0.663
+Epoch: 2 Test Perplexity:
+ rmse: 0.455 	 auc: 0.667
+Epoch: 3 Test Perplexity:
+ rmse: 0.451 	 auc: 0.678
+Epoch: 4 Test Perplexity:
+ rmse: 0.452 	 auc: 0.679
+Epoch: 5 Test Perplexity:
+ rmse: 0.448 	 auc: 0.689
+Epoch: 6 Test Perplexity:
+ rmse: 0.447 	 auc: 0.693
+Epoch: 7 Test Perplexity:
+ rmse: 0.446 	 auc: 0.696
+Epoch: 8 Test Perplexity:
+ rmse: 0.446 	 auc: 0.695
+Epoch: 9 Test Perplexity:
+ rmse: 0.446 	 auc: 0.696
+Epoch: 10 Test Perplexity:
+ rmse: 0.446 	 auc: 0.696
+Epoch: 11 Test Perplexity:
+ rmse: 0.446 	 auc: 0.696
+Epoch: 1 Test Perplexity:
+ rmse: 0.466 	 auc: 0.651 	 r2: 0.026
+Epoch: 2 Test Perplexity:
+ rmse: 0.457 	 auc: 0.660 	 r2: 0.062
+Epoch: 3 Test Perplexity:
+ rmse: 0.455 	 auc: 0.668 	 r2: 0.071
+Epoch: 4 Test Perplexity:
+ rmse: 0.454 	 auc: 0.674 	 r2: 0.074
+Epoch: 5 Test Perplexity:
+ rmse: 0.452 	 auc: 0.676 	 r2: 0.081
+Epoch: 6 Test Perplexity:
+ rmse: 0.450 	 auc: 0.686 	 r2: 0.089
+Epoch: 7 Test Perplexity:
+ rmse: 0.450 	 auc: 0.686 	 r2: 0.091
+Epoch: 8 Test Perplexity:
+ rmse: 0.447 	 auc: 0.691 	 r2: 0.101
+Epoch: 9 Test Perplexity:
+ rmse: 0.446 	 auc: 0.695 	 r2: 0.105
+Epoch: 10 Test Perplexity:
+ rmse: 0.447 	 auc: 0.695 	 r2: 0.103
+Epoch: 11 Test Perplexity:
+ rmse: 0.446 	 auc: 0.695 	 r2: 0.106
+Epoch: 12 Test Perplexity:
+ rmse: 0.446 	 auc: 0.695 	 r2: 0.105
+Epoch: 13 Test Perplexity:
+ rmse: 0.446 	 auc: 0.696 	 r2: 0.107
+Epoch: 14 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 15 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 16 Test Perplexity:
+ rmse: 0.446 	 auc: 0.696 	 r2: 0.107
+Epoch: 17 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 18 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 19 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 20 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 21 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 22 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 23 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 24 Test Perplexity:
+ rmse: 0.446 	 auc: 0.697 	 r2: 0.107
+Epoch: 1 Test Perplexity:
+ rmse: 0.465 	 auc: 0.652 	 r2: 0.028
+Epoch: 2 Test Perplexity:
+ rmse: 0.456 	 auc: 0.665 	 r2: 0.065
+Epoch: 3 Test Perplexity:
+ rmse: 0.457 	 auc: 0.659 	 r2: 0.061
+Epoch: 4 Test Perplexity:
+ rmse: 0.452 	 auc: 0.678 	 r2: 0.081
+Epoch: 5 Test Perplexity:
+ rmse: 0.451 	 auc: 0.681 	 r2: 0.087
+Epoch: 6 Test Perplexity:
+ rmse: 0.451 	 auc: 0.681 	 r2: 0.085
+Epoch: 7 Test Perplexity:
+ rmse: 0.448 	 auc: 0.690 	 r2: 0.100
+Epoch: 8 Test Perplexity:
+ rmse: 0.447 	 auc: 0.691 	 r2: 0.101
+Epoch: 9 Test Perplexity:
+ rmse: 0.447 	 auc: 0.694 	 r2: 0.104
+Epoch: 10 Test Perplexity:
+ rmse: 0.447 	 auc: 0.694 	 r2: 0.103
