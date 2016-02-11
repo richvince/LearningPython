@@ -24,7 +24,7 @@ from math import sqrt
 class StudentModel(object):
 
     def __init__(self, is_training, config):
-        #self.batch_size = batch_size = config.batch_size
+        self._batch_size = batch_size = config.batch_size
         self._min_lr = config.min_lr
         self.num_skills = num_skills = config.num_skills
         self.hidden_size = config.hidden_size
@@ -35,7 +35,7 @@ class StudentModel(object):
         self._target_id = target_id = tf.placeholder(tf.int32, [None])
         self._target_correctness = target_correctness = tf.placeholder(tf.float32, [None])
 
-        batch_size = tf.shape(inputs)[0]
+        #batch_size = tf.shape(inputs)[0]
 
         l2_loss = tf.constant(0.0)
 
@@ -60,7 +60,7 @@ class StudentModel(object):
             indices = tf.expand_dims(tf.range(0, batch_size, 1), 1)
             concated = tf.concat(1, [indices, labels])
             inputs = tf.sparse_to_dense(concated, tf.pack([batch_size, input_size]), 1.0, 0.0)
-            inputs = tf.reshape(inputs, tf.pack([batch_size, input_size]))
+            inputs.set_shape([batch_size, input_size])
 
         outputs = []
         states = []
@@ -69,8 +69,7 @@ class StudentModel(object):
             #outputs, states = rnn.rnn(cell, inputs, initial_state=self._initial_state)
             (cell_output, state) = cell(inputs, state)
             #outputs = cell_output
-            self._final_state = state
-            state = self._initial_state
+            self._final_state = self._initial_state = state
 
 
         # calculate the logits from last hidden layer to output layer
@@ -110,6 +109,10 @@ class StudentModel(object):
             session.run(tf.assign(self._lr, lr_value))
         else:
             session.run(tf.assign(self._lr, self.min_lr))
+
+    @property
+    def batch_size(self):
+        return self._batch_size
 
     @property
     def input_data(self):
@@ -175,32 +178,29 @@ class HyperParamsConfig(object):
   num_skills = 111
   momentum = 0.95
   min_lr = 0.0001
+  batch_size = 50
 
 
 def run_epoch(session, m, fileName, eval_op, verbose=False):
     """Runs the model on the given data."""
     start_time = time.time()
 
-    student_data = read_data_from_csv_file(fileName)
+    state = tf.zeros([m.batch_size, m.hidden_size])
+    inputs, targets = read_data_from_csv_file(fileName)
     index = 0
     pred_labels = []
     actual_labels = []
-
-    print "\n Start to run Epoch"
-    while(index < len(student_data)):
-        x = student_data[index][0]
-        y = student_data[index][1]
-
+    while(index+m.batch_size < len(inputs)):
+        x = inputs[index:index+m.batch_size]
+        y = targets[index:index+m.batch_size]
         target_id = []
         target_correctness = []
-        count = 0
         for item in y:
-            target_id.append(count * m.num_skills + item[0])
+            target_id.append(item[0])
             target_correctness.append(item[1])
             actual_labels.append(item[1])
-            count += 1
 
-        index += 1
+        index += m.batch_size
 
         cost, pred, state, _ = session.run([m.cost, m.pred, m.final_state, eval_op], feed_dict={
             m.input_data: x,m.target_id: target_id,
@@ -208,16 +208,69 @@ def run_epoch(session, m, fileName, eval_op, verbose=False):
 
         for p in pred:
             pred_labels.append(p)
-
-    #calculate rmse
+    #print pred_labels
     rmse = sqrt(mean_squared_error(actual_labels, pred_labels))
-    #calculate auc
     fpr, tpr, thresholds = metrics.roc_curve(actual_labels, pred_labels, pos_label=1)
     auc = metrics.auc(fpr, tpr)
+
     #calculate r^2
     r2 = r2_score(actual_labels, pred_labels)
     return rmse, auc, r2
 
+
+def read_data_from_csv_file(fileName):
+    config = HyperParamsConfig()
+    inputs = []
+    targets = []
+    rows = []
+    skills_num = config.num_skills
+    with open(fileName, "rb") as csvfile:
+        reader = csv.reader(csvfile, delimiter=',')
+        for row in reader:
+            rows.append(row)
+    index = 0
+    i = 0
+    print "the number of rows is " + str(len(rows))
+    tuple_rows = []
+    #turn list to tuple
+    while(index < len(rows)-1):
+        problems_num = int(rows[index][0])
+        if(problems_num <= 2):
+            index += 3
+        else:
+            tup = (rows[index], rows[index+1], rows[index+2])
+            tuple_rows.append(tup)
+            index += 3
+    #shuffle the tuple
+
+    random.shuffle(tuple_rows)
+    print "The number of students is ", len(tuple_rows)
+    while(i < len(tuple_rows)):
+        #skip the num is smaller than 2
+        tup = tuple_rows[i]
+        problems_num = int(tup[0][0])
+        if(problems_num <= 2):
+            i += 1
+        else:
+            problem_ids = tup[1]
+            correctness = tup[2]
+            for j in range(len(problem_ids)-1):
+
+                problem_id = int(problem_ids[j])
+
+                label_index = 0
+                if(int(correctness[j]) == 0):
+                    label_index = problem_id
+                else:
+                    label_index = problem_id + skills_num
+                inputs.append(label_index)
+                target_instance = [int(problem_ids[j+1]), int(correctness[j+1])]
+                targets.append(target_instance)
+            i += 1
+    print "Finish reading data"
+    return inputs, targets
+
+'''
 def read_data_from_csv_file(fileName):
     config = HyperParamsConfig()
 
@@ -272,13 +325,14 @@ def read_data_from_csv_file(fileName):
             i += 1
     print "Finish reading data"
     return student_data
-
+'''
 
 
 def main(unused_args):
 
   config = HyperParamsConfig()
   eval_config = HyperParamsConfig()
+  eval_config.batch_size = 1
 
   model_name = "model_variables"
 

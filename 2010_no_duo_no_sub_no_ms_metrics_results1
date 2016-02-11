@@ -88,3 +88,13 @@ Epoch: 9 Test Perplexity:
  rmse: 0.447 	 auc: 0.694 	 r2: 0.104
 Epoch: 10 Test Perplexity:
  rmse: 0.447 	 auc: 0.694 	 r2: 0.103
+Epoch: 11 Test Perplexity:
+ rmse: 0.446 	 auc: 0.696 	 r2: 0.106
+Epoch: 12 Test Perplexity:
+ rmse: 0.446 	 auc: 0.695 	 r2: 0.106
+Epoch: 1 Test Perplexity:
+ rmse: 0.472 	 auc: 0.600 	 r2: -0.002
+Epoch: 2 Test Perplexity:
+ rmse: 0.474 	 auc: 0.593 	 r2: -0.010
+Epoch: 3 Test Perplexity:
+ rmse: 0.472 	 auc: 0.590 	 r2: -0.002
